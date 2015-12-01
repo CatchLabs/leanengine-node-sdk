@@ -24,16 +24,22 @@ AV.Cloud.define('foo', function(req, res) {
   res.success('bar');
 });
 
-app.post('/login', function(req, res) {
-  AV.User.logIn(req.body.username, req.body.password).then(
-    function() {
-      res.redirect('/profile');
+app.all('/login', function(req, res) {
+    AV.User.logIn(req.body.username || req.query.username, req.body.password || req.query.password).then(
+    function(user) {
+        res.send(user.get('username'));
     },
     function(error) {
       res.status = 500;
       res.send(error);
     }
   );
+});
+
+app.all('/user/info', function(req, res) {
+    setTimeout(function() {
+        res.send(req.AV.user.get('username'));
+    }, 3000);
 });
 
 app.get('/logout', function(req, res) {

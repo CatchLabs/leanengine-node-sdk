@@ -2,6 +2,7 @@
 /* global describe, it */
 
 var nodeEnv = process.env.NODE_ENV || 'development';
+
 if(nodeEnv === 'development') {
 } else {
   var should = require('should'),

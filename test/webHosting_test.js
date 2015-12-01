@@ -1,78 +1,12 @@
 'use strict';
-var config = require('./config'),
-  AV = require('..'),
-  assert = require('assert'),
-  express = require('express'),
-  bodyParser = require('body-parser');
+var config = require('./example/config'),
+  request = require('supertest'),
+  should = require('should');
 
 var appId = config.appId;
 var appKey = config.appKey;
-var masterKey = config.masterKey;
 
-AV.initialize(appId, appKey, masterKey);
-
-var app = express();
-app.use(AV.Cloud);
-app.use(bodyParser.json());
-app.use(AV.Cloud.CookieSession({ secret: 'my secret', maxAge: 3600000, fetchUser: false }));
-
-app.get('/', function (req, res) {
-  res.send('Hello World!');
-});
-
-app.post('/login', function(req, res) {
-  AV.User.logIn(req.body.username, req.body.password).then(
-    function() {
-      res.redirect('/profile');
-    },
-    function(error) {
-      res.status = 500;
-      res.send(error);
-    }
-  );
-});
-
-app.get('/logout', function(req, res) {
-  AV.User.logOut();
-  res.redirect('/profile');
-});
-
-app.post('/testCookieSession', function(req, res) {
-  AV.User.logIn(req.body.username, req.body.password).then(function(user) {
-    assert.equal(req.body.username, user.get('username'));
-    assert.equal(AV.User.current(), user);
-    AV.User.logOut();
-    assert(!AV.User.current());
-    // 登出再登入不会有问题
-    return AV.User.logIn(req.body.username, req.body.password);
-  }).then(function(user) {
-    assert.equal(AV.User.current(), user);
-    // 在已登录状态，直接用另外一个账户登录
-    return AV.User.logIn('zhangsan', 'zhangsan');
-  }).then(function(user) {
-    assert.equal('zhangsan', user.get('username'));
-    assert.equal(AV.User.current(), user);
-    res.send('ok');
-  }, function(err) {
-    assert.ifError(err);
-  });
-});
-
-app.get('/profile', function(req, res) {
-  if (req.AV.user) {
-    res.send(req.AV.user);
-  } else {
-    res.send({});
-  }
-});
-
-AV.Cloud.define('foo', function(request, response) {
-  response.success("bar");
-});
-
-
-var request = require('supertest'),
-  should = require('should');
+var app = config.getApp();
 
 describe('webHosting', function() {
   it('index', function(done) {

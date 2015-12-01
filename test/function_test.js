@@ -1,229 +1,20 @@
 'use strict';
-var config = require('./config'),
-  AV = require('..'),
-  should = require('should'),
-  fs = require('fs'),
-  request = require('supertest'),
-  assert = require('assert');
+/* global describe, it */
+var should = require('should'); // jshint ignore:line
+var request = require('supertest');
+var config = require('./example/config');
 
 var appId = config.appId;
 var appKey = config.appKey;
 var masterKey = config.masterKey;
 
-AV.initialize(appId, appKey, masterKey);
+var sessionToken_admin = "w2jrtkbehp38otqmhbqu7ybs9";
 
-var TestObject = AV.Object.extend('TestObject');
-var ComplexObject = AV.Object.extend('ComplexObject');
-
-AV.Cloud.define('foo', function(request, response) {
-  assert.ok(request.meta.remoteAddress);
-  response.success("bar");
-});
-
-AV.Cloud.define('hello', function(request, response) {
-  response.success({action: "hello", name: request.params.name});
-});
-
-AV.Cloud.define('choice', function(req, res) {
-  if (req.params.choice) {
-    res.success('OK~');
-  } else {
-    res.error('OMG...');
-  }
-});
-
-AV.Cloud.define('complexObject', function(request, response) {
-  var query = new AV.Query(ComplexObject);
-  query.include('fileColumn');
-  query.ascending('createdAt');
-  query.find({
-    success: function(results) {
-      response.success({
-        foo: 'bar',
-        i: 123,
-        obj: {
-          a: 'b',
-          as: [1, 2, 3],
-        },
-        t: new Date('2015-05-14T09:21:18.273Z'),
-        avObject: results[0],
-        avObjects: results,
-      });
-    }
-  });
-});
-
-AV.Cloud.define('bareAVObject', function(request, response) {
-  var query = new AV.Query(ComplexObject);
-  query.include('fileColumn');
-  query.ascending('createdAt');
-  query.find({
-    success: function(results) {
-      response.success(results[0]);
-    }
-  })
-});
-
-AV.Cloud.define('AVObjects', function(request, response) {
-  var query = new AV.Query(ComplexObject);
-  query.include('fileColumn');
-  query.ascending('createdAt');
-  query.find({
-    success: function(results) {
-      response.success(results);
-    }
-  });
-});
-
-AV.Cloud.define('testAVObjectParams', function(request, response) {
-  request.params.avObject.should.be.instanceof(AV.Object);
-  request.params.avObject.get('name').should.be.equal('avObject');
-  request.params.avObject.get('pointerColumn').should.be.instanceof(AV.User);
-
-  request.params.avFile.should.be.instanceof(AV.File);
-
-  request.params.avObjects.forEach(function(object) {
-    object.should.be.instanceof(AV.Object);
-    object.get('name').should.be.equal('avObjects');
-  });
-
-  response.success();
-});
-
-AV.Cloud.define('testBareAVObjectParams', function(request, response) {
-  request.params.should.be.instanceof(AV.Object);
-  request.params.get('name').should.be.equal('avObject');
-  request.params.get('avFile').should.be.instanceof(AV.File);
-  request.params.get('avFile').name().should.be.equal('hello.txt');
-  response.success();
-});
-
-AV.Cloud.define('testAVObjectsArrayParams', function(request, response) {
-  request.params.forEach(function(object) {
-    object.get('name').should.be.equal('avObject');
-    object.get('avFile').should.be.instanceof(AV.File);
-    object.get('avFile').name().should.be.equal('hello.txt');
-  });
-  response.success();
-});
-
-AV.Cloud.define('testUser', function(request, response) {
-  assert.equal(request.user.className, '_User');
-  assert.equal(request.user.id, '54fd6a03e4b06c41e00b1f40');
-  assert.equal(request.user.get('username'), 'admin');
-  assert.equal(request.user, AV.User.current());
-  response.success("ok");
-});
-
-AV.Cloud.define('testRun', function(request, response) {
-  AV.Cloud.run('hello', {name: '李四'}, {
-    success: function(data) {
-      assert.deepEqual(data, {action: "hello", name: '李四'});
-      response.success();
-    }
-  });
-});
-
-AV.Cloud.define('testRun_options_callback', function(request, response) {
-  AV.Cloud.run('choice', {choice: true}, {
-    success: function(data) {
-      assert.equal('OK~', data);
-      AV.Cloud.run('choice', {choice: false}, {
-        success: function(data) {
-          assert.ifError(data);
-        },
-        error: function(err) {
-          assert.equal('OMG...', err);
-          response.success();
-        }
-      });
-    },
-    error: function(err) {
-      assert.ifError(err);
-    }
-  });
-});
-
-AV.Cloud.define('testRun_promise', function(request, response) {
-  AV.Cloud.run('choice', {choice: true}).then(function(data) {
-    assert.equal('OK~', data);
-    AV.Cloud.run('choice', {choice: false}).then(function(data) {
-      assert.ifError(data);
-    }, function(err) {
-      assert.equal('OMG...', err);
-      response.success();
-    });
-  },
-  function(err) {
-    assert.ifError(err);
-  });
-});
-
-AV.Cloud.define('testRunWithUser', function(request, response) {
-  AV.Cloud.run('testUser', {}, {
-    success: function(data) {
-      assert.equal('ok', data);
-      response.success();
-    }
-  });
-});
-
-AV.Cloud.define('testRunWithAVObject', function(request, response) {
- AV.Cloud.run('complexObject', {}, {
-   success: function(datas) {
-     response.success(datas);
-   }
- });
-})
-
-AV.Cloud.define('readDir', function(request, response) {
-  fs.readdir('.', function(err, dir) {
-    dir.should.containEql('package.json');
-    response.success(dir);
-  });
-});
-
-AV.Cloud.onVerified('sms', function(request) {
-  assert.equal(request.object.className, '_User');
-  assert.equal(request.object.id, '54fd6a03e4b06c41e00b1f40');
-  assert.equal(request.object.get('username'), 'admin');
-});
-
-AV.Cloud.define('testThrowError', function(request, response) {
-  /* jshint ignore:start */
-  noThisMethod();
-  /* jshint ignore:end */
-  response.success();
-});
-
-AV.Cloud.define("userMatching", function(req, res) {
-  setTimeout(function() {
-    // 为了更加靠谱的验证串号问题，走一次网络 IO
-    var query = new AV.Query(TestObject);
-    query.get('55069f5be4b0c93838ed9b17', {
-      success: function(obj) {
-        assert.equal(obj.get('foo'), 'bar');
-        res.success({reqUser: req.user, currentUser: AV.User.current()});
-      }, error: function() {
-        res.success({reqUser: req.user, currentUser: AV.User.current()});
-      }
-    });
-  }, Math.floor((Math.random() * 2000) + 1));
-});
-
-AV.Insight.on('end', function(err, result) {
-  assert.deepEqual({
-    "id" : "job id",
-    "status": "OK/ERROR",
-    "message": "当 status 为 ERROR 时的错误消息"
-  }, result);
-});
-
-var sessionToken_admin = config.sessionToken_admin;
+var app = config.getApp();
 
 describe('functions', function() {
   it('ping', function(done) {
-    request(AV.Cloud)
+    request(app)
       .get('/__engine/1/ping')
       .expect(200)
       .expect('{"runtime":"nodejs-' + process.version + '","version":"' + require('../package.json').version + '"}', done);
@@ -231,7 +22,7 @@ describe('functions', function() {
 
   // 测试最基本方法的有效性
   it('foo', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post('/1/functions/foo')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -241,7 +32,7 @@ describe('functions', function() {
 
   // 测试 api version 1.1 的有效性
   it('version_1.1', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post('/1.1/functions/foo')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -251,7 +42,7 @@ describe('functions', function() {
 
   // 测试参数的正确解析
   it('hello', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post('/1/functions/hello')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -262,7 +53,7 @@ describe('functions', function() {
 
   // 测试返回包含 AVObject 的复杂对象
   it('return_complexObject', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post('/1.1/call/complexObject')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -319,7 +110,7 @@ describe('functions', function() {
 
   // 返回单个 AVObject
   it('return_bareAVObject', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post('/1.1/call/bareAVObject')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -333,7 +124,7 @@ describe('functions', function() {
 
   // 返回 AVObject 数组
   it('return_AVObjectsArray', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post('/1.1/call/AVObjects')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -348,7 +139,7 @@ describe('functions', function() {
 
   // 测试发送包含 AVObject 的请求
   it('testAVObjectParams', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post('/1.1/call/testAVObjectParams')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -381,7 +172,7 @@ describe('functions', function() {
 
   // 测试发送单个 AVObject 作为请求参数
   it('testBareAVObjectParams', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post('/1.1/call/testBareAVObjectParams')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -413,7 +204,7 @@ describe('functions', function() {
       }
     };
 
-    request(AV.Cloud)
+    request(app)
       .post('/1.1/call/testAVObjectsArrayParams')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -425,7 +216,7 @@ describe('functions', function() {
 
   // 测试 run 方法的有效性
   it('testRun', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post('/1/functions/testRun')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -434,7 +225,7 @@ describe('functions', function() {
   });
 
   it('testRun_AVObjects', function(done) {
-   request(AV.Cloud)
+   request(app)
      .post('/1.1/call/testRunWithAVObject')
      .set('X-AVOSCloud-Application-Id', appId)
      .set('X-AVOSCloud-Application-Key', appKey)
@@ -446,7 +237,7 @@ describe('functions', function() {
   });
 
   it('testRun_text_plain', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post('/1/functions/testRun')
       .set('Content-Type', 'text/plain; charset=utf-8')
       .send(JSON.stringify({
@@ -459,21 +250,17 @@ describe('functions', function() {
   });
 
   it('no_this_method', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post('/1/functions/noThisMethod')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
-      .expect(404)
-      .expect({
-        "code": 1,
-        "error": "LeanEngine not found function named 'noThisMethod' for app '" + appId + "' on development."
-      }, done);
+      .expect(404, done);
   });
 
   // 测试带有 sessionToken 时，user 对象的正确解析
   it('testUser', function(done) {
     this.timeout(5000);
-    request(AV.Cloud)
+    request(app)
       .post('/1/functions/testUser')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -484,7 +271,7 @@ describe('functions', function() {
   // 无效 sessionToken 测试
   it('testUser_invalid_sessionToken', function(done) {
     this.timeout(5000);
-    request(AV.Cloud)
+    request(app)
       .post('/1/functions/testUser')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -499,7 +286,7 @@ describe('functions', function() {
   // 测试调用 run 方法时，传递 user 对象的有效性
   it('testRunWithUser', function(done) {
     this.timeout(5000);
-    request(AV.Cloud)
+    request(app)
       .post('/1/functions/testRunWithUser')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -510,7 +297,7 @@ describe('functions', function() {
   // 测试调用 run 方法 options callback
   it('testRun_options_callback', function(done) {
     this.timeout(5000);
-    request(AV.Cloud)
+    request(app)
       .post('/1/functions/testRun_options_callback')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -521,7 +308,7 @@ describe('functions', function() {
   // 测试调用 run 方法，返回值是 promise 类型
   it('testRun_promise', function(done) {
     this.timeout(5000);
-    request(AV.Cloud)
+    request(app)
       .post('/1/functions/testRun_promise')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
@@ -529,18 +316,9 @@ describe('functions', function() {
       .expect(200, done);
   });
 
-  // 测试 fs 模块的有效性
-  it('io', function(done) {
-    request(AV.Cloud)
-      .post('/1/functions/readDir')
-      .set('X-AVOSCloud-Application-Id', appId)
-      .set('X-AVOSCloud-Application-Key', appKey)
-      .expect(200, done);
-  });
-
   // 测试 onVerified hook 的有效性
   it('onVerified', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post("/1/functions/onVerified/sms")
       .set('X-Uluru-Application-Id', appId)
       .set('X-Uluru-Application-Key', appKey)
@@ -555,73 +333,17 @@ describe('functions', function() {
   });
 
   // 测试抛出异常时的处理
-  it('throw Error', function(done) {
-    var stderr_write = process.stderr.write;
-    var strings = [];
-    global.process.stderr.write = function(string) {
-      strings.push(string);
-    };
-    request(AV.Cloud)
+  it('throw_error', function(done) {
+    request(app)
       .post('/1/functions/testThrowError')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
       .expect(500)
-      .expect({result: 'ok'}, function() {
-        assert.deepEqual('Execute \'testThrowError\' failed with error: ReferenceError: noThisMethod is not defined', strings[0].split('\n')[0]);
-        assert.equal(1, strings.length);
-        global.process.stderr.write = stderr_write;
-        done();
-      });
-  });
-
-  // 用户串号测试
-  it('user_matching_func', function(done) {
-    this.timeout(30000);
-    var count = 0;
-    var cb = function(err) {
-      if (err) {
-        throw err;
-      }
-      count++;
-      if (count === 10) {
-        return done();
-      }
-    };
-    for (var i = 0; i <= 4; i++) {
-      request(AV.Cloud)
-        .post('/1.1/functions/userMatching')
-        .set('X-AVOSCloud-Application-Id', appId)
-        .set('X-AVOSCloud-Application-Key', appKey)
-        .set('X-AVOSCloud-session-token', sessionToken_admin)
-        .expect(200, function(err, res) {
-          res.body.result.reqUser.username.should.equal('admin');
-          res.body.result.currentUser.username.should.equal('admin');
-          return cb(err);
-      });
-      request(AV.Cloud)
-        .post('/1.1/functions/userMatching')
-        .set('X-AVOSCloud-Application-Id', appId)
-        .set('X-AVOSCloud-Application-Key', appKey)
-        .set('X-AVOSCloud-session-token', '3267fscy0q4g3i4yc9uq9rqqv')
-        .expect(200, function(err, res) {
-          res.body.result.reqUser.username.should.equal('zhangsan');
-          res.body.result.currentUser.username.should.equal('zhangsan');
-          return cb(err);
-      });
-      request(AV.Cloud)
-        .post('/1.1/functions/userMatching')
-        .set('X-AVOSCloud-Application-Id', appId)
-        .set('X-AVOSCloud-Application-Key', appKey)
-        .expect(200, function(err, res) {
-          should.not.exist(res.body.reqUser);
-          should.not.exist(res.body.currentUser);
-          return cb(err);
-      });
-    }
+      .expect({code: 1, error: 'noThisMethod is not defined'}, done);
   });
 
   it('_metadatas', function(done) {
-    request(AV.Cloud)
+    request(app)
       .get('/1/functions/_ops/metadatas')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Master-Key', masterKey)
@@ -632,7 +354,6 @@ describe('functions', function() {
           'testUser',
           'testRun',
           'testRunWithUser',
-          'readDir',
           '__on_verified_sms',
           'testThrowError',
           'userMatching' ]);
@@ -641,7 +362,7 @@ describe('functions', function() {
   });
 
   it('CORS', function(done) {
-    request(AV.Cloud)
+    request(app)
       .options('/1/functions')
       .set('Origin', 'http://foo.bar')
       .set('Access-Control-Request-Method', 'POST')
@@ -651,7 +372,7 @@ describe('functions', function() {
   });
 
   it('onCompleteBigqueryJob', function(done) {
-    request(AV.Cloud)
+    request(app)
       .post('/1.1/functions/BigQuery/onComplete')
       .set('X-AVOSCloud-Application-Id', appId)
       .set('X-AVOSCloud-Application-Key', appKey)
